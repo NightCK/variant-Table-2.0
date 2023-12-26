@@ -9,47 +9,75 @@ if (selection) {
 
 	switch (selection.type) {
 		case 'COMPONENT_SET':
-			const variantList = selection.findChildren(
-				(node) => node.type === 'COMPONENT'
-			) as ComponentNode[]
-			const booleanList: string[] = []
-
-			// Find boolean property and push it into booleanList
+			// Sort variant type to differant array
+			const booleanArray: string[] = []
+			const variantArray: object[] = []
 			for (const [property, value] of Object.entries(
 				selection.componentPropertyDefinitions
 			)) {
-				if (value.type === 'BOOLEAN') {
-					booleanList.push(property)
+				switch (value.type) {
+					case 'VARIANT':
+						const variant: object = {
+							[property]: value.variantOptions,
+						}
+						variantArray.push(variant)
+						break
+					case 'BOOLEAN':
+						booleanArray.push(property)
+						break
 				}
 			}
-
-			//  Generate variant with different boolean value
-			if (booleanList.length > 0) {
-				// Generate every possible boolean combination
-				const propertiesCombination = generateBooleanProperties(booleanList)
-
-				variantList.forEach((variant) => {
-					for (const properties of propertiesCombination) {
-						const node = createVariant(variant)
-						node.setProperties({ ...properties })
-						newSelection.push(node)
-					}
-				})
-			}
-
-			figma.currentPage.selection = newSelection
-			figma.viewport.scrollAndZoomIntoView(newSelection)
+			const booleanCombination = generateBooleanProperties(booleanArray)
+			const variantCombination = variantTable(variantArray, [], booleanCombination)
+			console.log(variantCombination)
 			figma.closePlugin('Done')
 			break
+
 		case 'COMPONENT':
 			// Handle componentNode
 			break
 		default:
 			figma.closePlugin('Select a component please')
+			break
+	}
+
+	function variantTable(
+		variantArray: object[],
+		propertiesArray: object[],
+		booleanCombination?: object[]
+	) {
+		if (variantArray.length === 0) return propertiesArray
+
+		const currentVariant = variantArray.shift() as object
+		const propertyName: string = Object.keys(currentVariant).toString()
+		const variantOption: string[] = Object.values(currentVariant)[0] // 不知道為何還有多包一層，因此加上 [0]
+		let newPropertiesArray: object[] = [] // 之前應該是沒給到這個暫存空間，才導致產出的 object 的 option 一直被覆蓋掉。
+
+		if (propertiesArray.length === 0) {
+			for (const option of variantOption) {
+				const newProperties: object = {
+					[propertyName]: option,
+				}
+				propertiesArray.push(newProperties)
+			}
+			return variantTable(variantArray, propertiesArray)
+		} else {
+			variantOption.map((option) => {
+				propertiesArray.map((properties) => {
+					const newProperties = {
+						...properties,
+						[propertyName]: option,
+					}
+
+					newPropertiesArray.push(newProperties)
+				})
+			})
+			return variantTable(variantArray, newPropertiesArray)
+		}
 	}
 
 	function generateBooleanProperties(booleanList: string[]) {
-		let booleanResult: object[] = []
+		let booleanCombination: object[] = []
 		let allTrueProperty: object = {}
 		let allFalseProperty: object = {}
 
@@ -60,7 +88,7 @@ if (selection) {
 				[boolean]: true,
 			}
 		})
-		booleanResult.push(allTrueProperty)
+		booleanCombination.push(allTrueProperty)
 
 		// Intialize all false scenario object,
 		// but push this array in the end of the function, to make sure the order is correct
@@ -89,13 +117,13 @@ if (selection) {
 						...setToTrueProperty,
 						[bool]: false,
 					}
-					booleanResult.push(setToTrueProperty)
+					booleanCombination.push(setToTrueProperty)
 				}
 			}
 		})
 
-		booleanResult.push(allFalseProperty)
-		return booleanResult
+		booleanCombination.push(allFalseProperty)
+		return booleanCombination
 	}
 
 	function createVariant(variant: ComponentNode) {
