@@ -7,13 +7,12 @@ if (selection) {
 }
 
 async function VariantTable() {
-	// await figma.loadFontAsync({ family: 'Rubik', style: 'Regular' })
-	// await figma.loadFontAsync({ family: 'Rubik', style: 'Bold' })
+	await figma.loadFontAsync({ family: 'Inter', style: 'Regular' })
+	await figma.loadFontAsync({ family: 'Inter', style: 'Bold' })
 
 	const selectionX = selection.x
 	const selectionY = selection.y
 	const selectionWidth = selection.width // 用 x 有可能會跟 selection 重疊，因此改抓 width
-	let nodeY: number = selectionY
 	let newSelection = [] as SceneNode[]
 	const containerFrame: FrameNode = figma.createFrame()
 
@@ -53,10 +52,12 @@ async function VariantTable() {
 			containerFrame.layoutSizingHorizontal = 'HUG'
 			containerFrame.itemSpacing = 0
 			containerFrame.x = selectionX + selectionWidth + 24
+			containerFrame.y = selectionY
+			newSelection.push(containerFrame)
+			figma.viewport.scrollAndZoomIntoView(newSelection)
 
 			figma.closePlugin('Done')
 			break
-
 		case 'COMPONENT':
 			// Handle componentNode
 			break
@@ -196,12 +197,12 @@ async function VariantTable() {
 		groupFrame.paddingRight = 20
 		groupFrame.itemSpacing = 16
 
-		// const groupTitle: TextNode = figma.createText()
-		// groupTitle.characters = indexProperty
-		// groupTitle.fontName = { family: 'Rubik', style: 'Bold' }
-		// groupTitle.fontSize = 48
-		// groupTitle.textCase = 'TITLE'
-		// groupFrame.appendChild(groupTitle)
+		const groupTitle: TextNode = figma.createText()
+		groupTitle.characters = indexValue
+		groupTitle.fontName = { family: 'Inter', style: 'Bold' }
+		groupTitle.fontSize = 32
+		groupTitle.textCase = 'TITLE'
+		groupFrame.appendChild(groupTitle)
 
 		// 利用 groupSelection 建立 InstanceNode
 		groupSelection.map((variant: object) => {
