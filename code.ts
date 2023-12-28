@@ -1,11 +1,21 @@
 const selection = figma.currentPage.selection[0]
 
 if (selection) {
+	VariantTable()
+} else {
+	figma.closePlugin('Please select a component')
+}
+
+async function VariantTable() {
+	// await figma.loadFontAsync({ family: 'Rubik', style: 'Regular' })
+	// await figma.loadFontAsync({ family: 'Rubik', style: 'Bold' })
+
 	const selectionX = selection.x
 	const selectionY = selection.y
 	const selectionWidth = selection.width // 用 x 有可能會跟 selection 重疊，因此改抓 width
 	let nodeY: number = selectionY
 	let newSelection = [] as SceneNode[]
+	const containerFrame: FrameNode = figma.createFrame()
 
 	switch (selection.type) {
 		case 'COMPONENT_SET':
@@ -27,9 +37,23 @@ if (selection) {
 						break
 				}
 			}
-			const booleanCombination = generateBooleanProperties(booleanArray)
-			const variantCombination = variantTable(variantArray, [], booleanCombination)
-			console.log(variantCombination)
+			const booleanCombination = generateBooleanCombination(booleanArray)
+			const variantProperties = generateVariantProperties(
+				variantArray,
+				[],
+				booleanCombination
+			)
+
+			createVariant(variantProperties, containerFrame)
+
+			// 建立主要容器的 Frame
+			containerFrame.name = selection.name
+			containerFrame.layoutMode = 'HORIZONTAL'
+			containerFrame.layoutSizingVertical = 'HUG'
+			containerFrame.layoutSizingHorizontal = 'HUG'
+			containerFrame.itemSpacing = 0
+			containerFrame.x = selectionX + selectionWidth + 24
+
 			figma.closePlugin('Done')
 			break
 
@@ -41,42 +65,52 @@ if (selection) {
 			break
 	}
 
-	function variantTable(
+	function generateVariantProperties(
 		variantArray: object[],
 		propertiesArray: object[],
 		booleanCombination?: object[]
 	) {
 		if (variantArray.length === 0) return propertiesArray
 
-		const currentVariant = variantArray.shift() as object
+		const currentVariant = variantArray.pop() as object
 		const propertyName: string = Object.keys(currentVariant).toString()
 		const variantOption: string[] = Object.values(currentVariant)[0] // 不知道為何還有多包一層，因此加上 [0]
 		let newPropertiesArray: object[] = [] // 之前應該是沒給到這個暫存空間，才導致產出的 object 的 option 一直被覆蓋掉。
 
 		if (propertiesArray.length === 0) {
 			for (const option of variantOption) {
-				const newProperties: object = {
-					[propertyName]: option,
+				if (booleanCombination) {
+					for (const bool of booleanCombination) {
+						const newProperties: object = {
+							[propertyName]: option,
+							...bool,
+						}
+						propertiesArray.push(newProperties)
+					}
+				} else {
+					const newProperties: object = {
+						[propertyName]: option,
+					}
+					propertiesArray.push(newProperties)
 				}
-				propertiesArray.push(newProperties)
 			}
-			return variantTable(variantArray, propertiesArray)
+			return generateVariantProperties(variantArray, propertiesArray)
 		} else {
 			variantOption.map((option) => {
 				propertiesArray.map((properties) => {
 					const newProperties = {
-						...properties,
 						[propertyName]: option,
+						...properties,
 					}
 
 					newPropertiesArray.push(newProperties)
 				})
 			})
-			return variantTable(variantArray, newPropertiesArray)
+			return generateVariantProperties(variantArray, newPropertiesArray)
 		}
 	}
 
-	function generateBooleanProperties(booleanList: string[]) {
+	function generateBooleanCombination(booleanList: string[]) {
 		let booleanCombination: object[] = []
 		let allTrueProperty: object = {}
 		let allFalseProperty: object = {}
@@ -126,13 +160,59 @@ if (selection) {
 		return booleanCombination
 	}
 
-	function createVariant(variant: ComponentNode) {
-		const node = variant.createInstance()
-		node.x = selectionX + selectionWidth + 24
-		node.y = nodeY
-		nodeY += variant.height + 16 // 避免元件重疊，抓 variant 高度加上 spacing
-		return node
+	function createVariant(variantProperties: object[], targetContainer: FrameNode) {
+		if (variantProperties.length === 0) return
+
+		// TODO 讓使用者從 UI 選擇要怎麼排序。應該只要替換掉 selectedIndex 就可以
+		let properties: object[] = Object.values(variantProperties)
+		let groupSelection: object[] = []
+		const selectedIndex = 0
+		const indexVariant = properties.shift() as Object
+		const indexProperty: string = Object.keys(indexVariant)[selectedIndex] // 例如：State
+		const indexValue: string = Object.values(indexVariant)[selectedIndex] // 例如：Active
+
+		for (const variant of Object.values(properties)) {
+			const property: string = Object.keys(variant)[selectedIndex]
+			const value: string = Object.values(variant)[selectedIndex]
+
+			if (property === indexProperty && value === indexValue) {
+				// 找出一樣的值，例如符合 State:Active，就會被 push 倒 groupSelection
+				groupSelection.push(variant)
+				// 接著用 filter() 把已經 push 過的 variant 移除
+				properties = properties.filter((property) => property !== variant)
+			}
+		}
+
+		// 建立各群組的 Frame
+		const groupFrame: FrameNode = figma.createFrame()
+		groupFrame.name = `${indexProperty}:${indexValue}`
+		groupFrame.layoutMode = 'VERTICAL'
+		groupFrame.layoutSizingVertical = 'HUG'
+		groupFrame.layoutSizingHorizontal = 'HUG'
+		groupFrame.maxWidth = 800
+		groupFrame.paddingTop = 20
+		groupFrame.paddingBottom = 20
+		groupFrame.paddingLeft = 20
+		groupFrame.paddingRight = 20
+		groupFrame.itemSpacing = 16
+
+		// const groupTitle: TextNode = figma.createText()
+		// groupTitle.characters = indexProperty
+		// groupTitle.fontName = { family: 'Rubik', style: 'Bold' }
+		// groupTitle.fontSize = 48
+		// groupTitle.textCase = 'TITLE'
+		// groupFrame.appendChild(groupTitle)
+
+		// 利用 groupSelection 建立 InstanceNode
+		groupSelection.map((variant: object) => {
+			const selectedNode = selection as ComponentSetNode
+			const instance = selectedNode.defaultVariant.createInstance()
+			instance.setProperties({ ...variant })
+			groupFrame.appendChild(instance)
+		})
+
+		// 將 groupFrame 放入 containerFrame
+		containerFrame.appendChild(groupFrame)
+		return createVariant(properties, containerFrame)
 	}
-} else {
-	figma.closePlugin('Please select a component')
 }
