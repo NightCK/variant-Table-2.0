@@ -1,3 +1,7 @@
+// TODO
+// 1. Ignore selected property
+// 2. User can choose which property as group
+
 const selection = figma.currentPage.selection[0]
 
 if (selection) {
@@ -206,6 +210,7 @@ async function VariantTable() {
 
 		// 利用 groupSelection 建立 InstanceNode
 		groupSelection.map((variant: object) => {
+			// Create InstanceNode
 			const selectedNode = selection as ComponentSetNode
 			const instance = selectedNode.defaultVariant.createInstance()
 			instance.setProperties({ ...variant })
