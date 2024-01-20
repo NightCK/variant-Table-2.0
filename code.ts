@@ -7,86 +7,113 @@ if (selection) {
 }
 
 async function VariantTable() {
+	// TODO: 一建立 font 系統就預設用 Inter，就算要用別的 font 也是得先讀取 Inter 再改過去自己想要的...
+	// 所以就索性先用 Inter，應該有正確的方式
 	await figma.loadFontAsync({ family: 'Inter', style: 'Regular' })
 	await figma.loadFontAsync({ family: 'Inter', style: 'Bold' })
 
 	if (selection) {
-		var indexProp: string = 'State' // 開發用，先寫死 'State'
+		var anchorProperty: string = ''
 		const selectionX = selection.x
 		const selectionY = selection.y
-		const selectionWidth = selection.width // 用 x 有可能會跟 selection 重疊，因此改抓 width
-		const containerFrame: FrameNode = figma.createFrame()
+		const selectionWidth = selection.width
+		const variantList: string[] = []
 		const booleanList: string[] = []
-		const indexList: string[] = []
-		let nodeY: number = selectionY
+		let booleanCombination: object[] = []
 		let newSelection = [] as SceneNode[]
 
-		// Sort property
 		switch (selection.type) {
 			case 'COMPONENT_SET':
-				const variantList = selection.findChildren(
+				const componentList = selection.findChildren(
 					(node) => node.type === 'COMPONENT'
 				) as ComponentNode[]
 
-				// Sort property type
-				for (const [property, value] of Object.entries(
-					selection.componentPropertyDefinitions
-				)) {
-					if (value.type === 'BOOLEAN') {
-						booleanList.push(property)
-					}
-					// TODO 要顯示到 UI 上，讓使用者選擇用什麼來 Group
-					if (value.type === 'VARIANT') {
-						indexList.push(property)
-					}
-				}
+				sortProperties(selection)
+				booleanCombination = generateBooleanProperties(booleanList)
 
 				// 建立主要容器的 Frame
-				containerFrame.name = selection.name
+				const containerFrame: FrameNode = figma.createFrame()
+				containerFrame.name = `${selection.name} - Variant Table`
 				containerFrame.layoutMode = 'VERTICAL'
 				containerFrame.layoutSizingVertical = 'HUG'
 				containerFrame.layoutSizingHorizontal = 'HUG'
-				containerFrame.itemSpacing = 0
+				containerFrame.verticalPadding = 48
+				containerFrame.horizontalPadding = 48
+				containerFrame.itemSpacing = 24
 				containerFrame.x = selectionX + selectionWidth + 24
 				containerFrame.y = selectionY
+				containerFrame.cornerRadius = 12
+				containerFrame.fills = []
 
-				const booleanCombination = generateBooleanProperties(booleanList)
-				selection.componentPropertyDefinitions[indexProp].variantOptions?.forEach(
-					(indexOption) => {
-						const regex = new RegExp(`${indexProp}=${indexOption}`, 'ig')
-						const variantGroup: ComponentNode[] = variantList.filter((variant) =>
-							variant.name.match(regex)
-						)
+				if (variantList.length > 0) {
+					anchorProperty = variantList[0]
+					console.log('variantList', anchorProperty)
 
-						// 建立各群組的 Frame
-						const groupFrame: FrameNode = figma.createFrame()
-						groupFrame.name = `${indexProp}:${indexOption}`
-						groupFrame.layoutMode = 'VERTICAL'
-						groupFrame.layoutSizingVertical = 'HUG'
-						groupFrame.layoutSizingHorizontal = 'HUG'
-						groupFrame.paddingTop = 20
-						groupFrame.paddingBottom = 20
-						groupFrame.paddingLeft = 20
-						groupFrame.paddingRight = 20
-						groupFrame.itemSpacing = 16
+					selection.componentPropertyDefinitions[anchorProperty].variantOptions?.forEach(
+						(anchorOption) => {
+							const regex = new RegExp(`${anchorProperty}=${anchorOption}`, 'ig')
+							const variantGroup: ComponentNode[] = componentList.filter((variant) =>
+								variant.name.match(regex)
+							)
 
-						const groupTitle: TextNode = figma.createText()
-						groupTitle.characters = indexOption
-						groupTitle.fontName = { family: 'Inter', style: 'Bold' }
-						groupTitle.fontSize = 32
-						groupTitle.textCase = 'TITLE'
-						groupFrame.appendChild(groupTitle)
+							// 建立各群組的 Frame
+							const groupFrame: FrameNode = figma.createFrame()
+							groupFrame.name = `${anchorProperty}:${anchorOption}`
+							groupFrame.layoutMode = 'HORIZONTAL'
+							groupFrame.layoutSizingVertical = 'HUG'
+							groupFrame.layoutSizingHorizontal = 'HUG'
+							groupFrame.paddingTop = 40
+							groupFrame.paddingBottom = 40
+							groupFrame.paddingLeft = 40
+							groupFrame.paddingRight = 40
+							groupFrame.itemSpacing = 16
+							groupFrame.cornerRadius = 12
+							groupFrame.strokes = [{ type: 'SOLID', color: { r: 0, g: 0, b: 0 } }]
 
-						const instanceGroup: FrameNode = createVariant(
-							indexOption,
-							variantGroup,
-							booleanCombination
-						)
+							const frameIndexOption: FrameNode = figma.createFrame()
+							frameIndexOption.name = 'Variant Title'
+							frameIndexOption.layoutMode = 'VERTICAL'
+							frameIndexOption.layoutSizingVertical = 'HUG'
+							frameIndexOption.layoutSizingHorizontal = 'FIXED'
+							frameIndexOption.itemSpacing = 4
+							frameIndexOption.resize(160, frameIndexOption.height)
+							frameIndexOption.fills = []
+							groupFrame.appendChild(frameIndexOption)
 
-						groupFrame.appendChild(instanceGroup)
-						containerFrame.appendChild(groupFrame)
-					}
-				)
+							const textIndexVariant: TextNode = figma.createText()
+							textIndexVariant.characters = anchorProperty
+							textIndexVariant.fontName = { family: 'Inter', style: 'Bold' }
+							textIndexVariant.fontSize = 12
+							textIndexVariant.textCase = 'TITLE'
+							textIndexVariant.fills = [
+								{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } },
+							]
+							frameIndexOption.appendChild(textIndexVariant)
+							textIndexVariant.layoutSizingHorizontal = 'FILL'
+
+							const textIndexOption: TextNode = figma.createText()
+							textIndexOption.characters = anchorOption
+							textIndexOption.fontName = { family: 'Inter', style: 'Bold' }
+							textIndexOption.fontSize = 32
+							textIndexOption.textCase = 'TITLE'
+							frameIndexOption.appendChild(textIndexOption)
+							textIndexOption.layoutSizingHorizontal = 'FILL'
+
+							const instanceGroup: FrameNode = createVariant(
+								anchorOption,
+								variantGroup,
+								booleanCombination
+							)
+
+							groupFrame.appendChild(instanceGroup)
+							containerFrame.appendChild(groupFrame)
+						}
+					)
+				} else {
+					// TODO: 處理只有 boolean 的情況
+					anchorProperty = booleanList[0]
+					console.log('booleanList', anchorProperty)
+				}
 
 				newSelection.push(containerFrame)
 				figma.currentPage.selection = newSelection
@@ -94,10 +121,23 @@ async function VariantTable() {
 				figma.closePlugin('Done')
 				break
 			case 'COMPONENT':
-				// Handle componentNode
+				figma.closePlugin('Select a component set please 🙏🏻')
 				break
 			default:
-				figma.closePlugin('Select a component please')
+				figma.closePlugin('Select a component set please 🙏🏻')
+		}
+
+		function sortProperties(node: ComponentNode | ComponentSetNode) {
+			// Sort property type
+			for (const [property, value] of Object.entries(node.componentPropertyDefinitions)) {
+				if (value.type === 'BOOLEAN') {
+					booleanList.push(property)
+				}
+				if (value.type === 'VARIANT') {
+					variantList.push(property)
+				}
+			}
+			return
 		}
 
 		function generateBooleanProperties(booleanList: string[]) {
@@ -155,16 +195,17 @@ async function VariantTable() {
 			variantGroup: ComponentNode[],
 			booleanCombination?: object[]
 		) {
-			const Container: FrameNode = figma.createFrame()
-			Container.name = `${indexProp}:${indexOption}`
-			Container.layoutMode = 'HORIZONTAL'
-			Container.layoutSizingVertical = 'HUG'
-			Container.layoutSizingHorizontal = 'HUG'
-			Container.paddingTop = 20
-			Container.paddingBottom = 20
-			Container.paddingLeft = 20
-			Container.paddingRight = 20
-			Container.itemSpacing = 48
+			const container: FrameNode = figma.createFrame()
+			container.name = `${indexOption}`
+			container.layoutMode = 'HORIZONTAL'
+			container.layoutSizingVertical = 'HUG'
+			container.layoutSizingHorizontal = 'HUG'
+			container.paddingTop = 20
+			container.paddingBottom = 20
+			container.paddingLeft = 20
+			container.paddingRight = 20
+			container.itemSpacing = 48
+			container.fills = []
 
 			variantGroup.map((variant) => {
 				const variantContainer: FrameNode = figma.createFrame()
@@ -173,13 +214,16 @@ async function VariantTable() {
 				variantContainer.layoutSizingVertical = 'HUG'
 				variantContainer.layoutSizingHorizontal = 'HUG'
 				variantContainer.itemSpacing = 16
-				Container.appendChild(variantContainer)
+				variantContainer.fills = []
+				container.appendChild(variantContainer)
 
 				const variantTitle: TextNode = figma.createText()
 				variantTitle.characters = variant.name
 				variantTitle.fontName = { family: 'Inter', style: 'Bold' }
 				variantTitle.fontSize = 16
 				variantTitle.textCase = 'TITLE'
+				variantTitle.fills = [{ type: 'SOLID', color: { r: 0.2, g: 0.2, b: 0.2 } }]
+
 				variantContainer.appendChild(variantTitle)
 
 				const variantCollection: FrameNode = figma.createFrame()
@@ -188,6 +232,7 @@ async function VariantTable() {
 				variantCollection.layoutSizingVertical = 'HUG'
 				variantCollection.layoutSizingHorizontal = 'HUG'
 				variantCollection.itemSpacing = 16
+				variantCollection.fills = []
 				variantContainer.appendChild(variantCollection)
 
 				if (booleanCombination) {
@@ -201,7 +246,7 @@ async function VariantTable() {
 					variantCollection.appendChild(newInstance)
 				}
 			})
-			return Container
+			return container
 		}
 	}
 }
